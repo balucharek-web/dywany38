@@ -14,7 +14,7 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
-        multiDexEnabled = true // <--- TO ROZWIĄZUJE BŁĄD DEX
+        multiDexEnabled = true
     }
 
     compileOptions {
@@ -36,10 +36,14 @@ android {
 
     packaging {
         jniLibs {
+            useLegacyPackaging = true
             keepDebugSymbols.add("**/*.so")
         }
         resources {
-            excludes.add("/META-INF/{AL2.0,LGPL2.1}")
+            excludes.add("META-INF/INDEX.LIST")
+            excludes.add("META-INF/DEPENDENCIES")
+            excludes.add("META-INF/LICENSE*")
+            excludes.add("META-INF/NOTICE*")
         }
     }
 }
@@ -52,7 +56,6 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
     
-    // MultiDex
     implementation("androidx.multidex:multidex:2.0.1")
 
     // Firebase
