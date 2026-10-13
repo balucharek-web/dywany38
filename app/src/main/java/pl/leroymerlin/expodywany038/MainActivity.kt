@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -68,6 +69,7 @@ class InventoryViewModel : ViewModel() {
     }
 
     fun saveScannedProduct(ean: String, location: Int, sub: String) {
+        if (ean.isBlank()) return
         val product = Product(
             id = ean,
             ean = ean,
@@ -95,11 +97,12 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// --- 4. INTERFEJS UŻYTKOWNIKA I SKANER ---
+// --- 4. INTERFEJS UŻYTKOWNIKA ---
 @Composable
 fun MainScreen(viewModel: InventoryViewModel) {
     var showScanner by remember { mutableStateOf(false) }
     var scannedEan by remember { mutableStateOf<String?>(null) }
+    var showManualDialog by remember { mutableStateOf(false) }
     
     val context = LocalContext.current
     var hasCamPermission by remember {
@@ -110,13 +113,26 @@ fun MainScreen(viewModel: InventoryViewModel) {
         hasCamPermission = granted
     }
 
+    // Okienko po zeskanowaniu kodu aparatem
     if (scannedEan != null) {
         SaveProductDialog(
-            ean = scannedEan!!,
+            initialEan = scannedEan!!,
             onDismiss = { scannedEan = null },
-            onSave = { loc, sub ->
-                viewModel.saveScannedProduct(scannedEan!!, loc, sub)
+            onSave = { ean, loc, sub ->
+                viewModel.saveScannedProduct(ean, loc, sub)
                 scannedEan = null
+            }
+        )
+    }
+
+    // Okienko dodawania ręcznego
+    if (showManualDialog) {
+        SaveProductDialog(
+            initialEan = "",
+            onDismiss = { showManualDialog = false },
+            onSave = { ean, loc, sub ->
+                viewModel.saveScannedProduct(ean, loc, sub)
+                showManualDialog = false
             }
         )
     }
@@ -141,6 +157,17 @@ fun MainScreen(viewModel: InventoryViewModel) {
         }
     } else {
         Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Expo Dywany - Sklep 038") },
+                    actions = {
+                        // Przycisk dodawania ręcznego w prawym górnym rogu
+                        IconButton(onClick = { showManualDialog = true }) {
+                            Icon(Icons.Filled.Edit, contentDescription = "Dodaj ręcznie")
+                        }
+                    }
+                )
+            },
             floatingActionButton = {
                 FloatingActionButton(onClick = {
                     if (!hasCamPermission) launcher.launch(Manifest.permission.CAMERA)
@@ -160,9 +187,6 @@ fun ProductList(viewModel: InventoryViewModel, modifier: Modifier = Modifier) {
     val products by viewModel.products.collectAsState()
 
     Column(modifier = modifier.padding(16.dp)) {
-        Text(text = "Expo Dywany - Sklep 038", style = MaterialTheme.typography.headlineMedium)
-        Spacer(modifier = Modifier.height(16.dp))
-        
         if (products.isEmpty()) {
             Text("Brak produktów lub łączenie z bazą...")
         } else {
@@ -181,16 +205,22 @@ fun ProductList(viewModel: InventoryViewModel, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun SaveProductDialog(ean: String, onDismiss: () -> Unit, onSave: (Int, String) -> Unit) {
+fun SaveProductDialog(initialEan: String, onDismiss: () -> Unit, onSave: (String, Int, String) -> Unit) {
+    var eanInput by remember { mutableStateOf(initialEan) }
     var locationInput by remember { mutableStateOf("") }
     var subInput by remember { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Zapisz dywan") },
+        title = { Text(if (initialEan.isEmpty()) "Dodaj dywan ręcznie" else "Zapisz dywan") },
         text = {
             Column {
-                Text("Zeskanowano EAN: $ean")
+                OutlinedTextField(
+                    value = eanInput,
+                    onValueChange = { eanInput = it },
+                    label = { Text("Kod EAN / Indeks") },
+                    enabled = initialEan.isEmpty() // Jeśli kod przeszedł ze skanera, jest zablokowany do edycji, przy ręcznym wpisaniu można go podać
+                )
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = locationInput,
@@ -207,7 +237,7 @@ fun SaveProductDialog(ean: String, onDismiss: () -> Unit, onSave: (Int, String) 
         confirmButton = {
             Button(onClick = {
                 val loc = locationInput.toIntOrNull() ?: 0
-                onSave(loc, subInput.uppercase())
+                onSave(eanInput.trim(), loc, subInput.uppercase().trim())
             }) { Text("Zapisz") }
         },
         dismissButton = {
