@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "293795918943",
+    "project_id": "dywany38",
+    "storage_bucket": "dywany38.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:293795918943:android:f4d35da91b0c2c30ee17ea",
+        "android_client_info": {
+          "package_name": "pl.leroymerlin.expodywany038"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC8uSTVOTQLfSnGVIMU4UaFl16tdVVn3JM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
