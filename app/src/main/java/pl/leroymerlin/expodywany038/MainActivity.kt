@@ -18,6 +18,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -29,6 +31,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
@@ -50,10 +54,14 @@ data class Product(
 
 class InventoryViewModel : ViewModel() {
     private val db = FirebaseFirestore.getInstance()
+    private val auth = FirebaseAuth.getInstance()
     private val collectionRef = db.collection("store_038").document("products").collection("items")
 
     private val _products = MutableStateFlow<List<Product>>(emptyList())
     val products: StateFlow<List<Product>> = _products
+
+    private val _currentUser = MutableStateFlow(auth.currentUser)
+    val currentUser: StateFlow<FirebaseUser?> = _currentUser
 
     init {
         collectionRef.addSnapshotListener { snapshot, error ->
@@ -68,7 +76,8 @@ class InventoryViewModel : ViewModel() {
     }
 
     fun saveProduct(ean: String, location: Int, sub: String) {
-        if (ean.isBlank()) return
+        if (auth.currentUser == null || ean.isBlank()) return
+        
         val product = Product(
             id = ean,
             ean = ean,
@@ -77,6 +86,11 @@ class InventoryViewModel : ViewModel() {
             updatedAt = System.currentTimeMillis()
         )
         collectionRef.document(ean).set(product)
+    }
+
+    fun logout() {
+        auth.signOut()
+        _currentUser.value = null
     }
 }
 
@@ -100,7 +114,9 @@ fun MainScreen(viewModel: InventoryViewModel) {
     var showScanner by remember { mutableStateOf(false) }
     var scannedEan by remember { mutableStateOf<String?>(null) }
     var showManualDialog by remember { mutableStateOf(false) }
+    var showLoginDialog by remember { mutableStateOf(false) }
     
+    val currentUser by viewModel.currentUser.collectAsState()
     val context = LocalContext.current
     var hasCamPermission by remember {
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
@@ -110,25 +126,53 @@ fun MainScreen(viewModel: InventoryViewModel) {
         hasCamPermission = granted
     }
 
-    // Okienko zapisu dla skanera lub dodawania ręcznego
     if (scannedEan != null) {
-        SaveProductDialog(
-            initialEan = scannedEan!!,
-            onDismiss = { scannedEan = null },
-            onSave = { ean, loc, sub ->
-                viewModel.saveProduct(ean, loc, sub)
-                scannedEan = null
-            }
-        )
+        if (currentUser == null) {
+            showLoginDialog = true
+        } else {
+            SaveProductDialog(
+                initialEan = scannedEan!!,
+                onDismiss = { scannedEan = null },
+                onSave = { ean, loc, sub ->
+                    viewModel.saveProduct(ean, loc, sub)
+                    scannedEan = null
+                }
+            )
+        }
     }
 
     if (showManualDialog) {
-        SaveProductDialog(
-            initialEan = "",
-            onDismiss = { showManualDialog = false },
-            onSave = { ean, loc, sub ->
-                viewModel.saveProduct(ean, loc, sub)
-                showManualDialog = false
+        if (currentUser == null) {
+            showLoginDialog = true
+            showManualDialog = false
+        } else {
+            SaveProductDialog(
+                initialEan = "",
+                onDismiss = { showManualDialog = false },
+                onSave = { ean, loc, sub ->
+                    viewModel.saveProduct(ean, loc, sub)
+                    showManualDialog = false
+                }
+            )
+        }
+    }
+
+    if (showLoginDialog) {
+        AlertDialog(
+            onDismissRequest = { showLoginDialog = false; scannedEan = null },
+            title = { Text("Wymagane logowanie służbowe") },
+            text = { Text("Aby dodawać lub edytować dywany, musisz zalogować się kontem Google powiązanym z profilem firmowym Leroy Merlin.") },
+            confirmButton = {
+                Button(onClick = {
+                    showLoginDialog = false
+                }) {
+                    Text("Zaloguj kontem Google")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLoginDialog = false; scannedEan = null }) {
+                    Text("Anuluj")
+                }
             }
         )
     }
@@ -155,12 +199,31 @@ fun MainScreen(viewModel: InventoryViewModel) {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("Expo Dywany - Sklep 038") }
+                    title = { Text("Expo Dywany - Sklep 038") },
+                    actions = {
+                        IconButton(onClick = {
+                            if (currentUser == null) {
+                                showLoginDialog = true
+                            } else {
+                                viewModel.logout()
+                            }
+                        }) {
+                            Icon(
+                                imageVector = if (currentUser != null) Icons.Filled.Person else Icons.Filled.Lock,
+                                contentDescription = "Profil / Logowanie"
+                            )
+                        }
+                    }
                 )
             },
             floatingActionButton = {
-                // Przycisk plusa służący do dodawania nowego produktu
-                FloatingActionButton(onClick = { showManualDialog = true }) {
+                FloatingActionButton(onClick = {
+                    if (currentUser == null) {
+                        showLoginDialog = true
+                    } else {
+                        showManualDialog = true
+                    }
+                }) {
                     Icon(Icons.Filled.Add, contentDescription = "Dodaj produkt")
                 }
             }
@@ -189,12 +252,11 @@ fun ProductList(viewModel: InventoryViewModel, modifier: Modifier = Modifier, on
     }
 
     Column(modifier = modifier.padding(16.dp)) {
-        // Pasek wyszukiwania z ikoną aparatu umożliwiającą skanowanie bezpośrednio z pola
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Szukaj EAN / regału...") },
+            placeholder = { Text("Szukaj EAN / regału (dostępne bez logowania)...") },
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "Szukaj") },
             trailingIcon = {
                 IconButton(onClick = onStartScan) {
