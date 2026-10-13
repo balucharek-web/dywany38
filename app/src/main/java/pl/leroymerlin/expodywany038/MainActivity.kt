@@ -1,4 +1,4 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, androidx.camera.core.ExperimentalGetImage::class)
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 package pl.leroymerlin.expodywany038
 
 import android.Manifest
@@ -37,7 +37,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.util.concurrent.Executors
 
-// --- 1. MODEL DANYCH ---
 data class Product(
     val id: String = "",
     val location: Int = 0,
@@ -48,7 +47,6 @@ data class Product(
     val updatedAt: Long = 0L
 )
 
-// --- 2. LOGIKA BAZY FIREBASE ---
 class InventoryViewModel : ViewModel() {
     private val db = FirebaseFirestore.getInstance()
     private val collectionRef = db.collection("store_038").document("products").collection("items")
@@ -81,7 +79,6 @@ class InventoryViewModel : ViewModel() {
     }
 }
 
-// --- 3. GŁÓWNA AKTYWNOŚĆ ---
 class MainActivity : ComponentActivity() {
     private val viewModel = InventoryViewModel()
 
@@ -97,7 +94,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// --- 4. INTERFEJS UŻYTKOWNIKA ---
 @Composable
 fun MainScreen(viewModel: InventoryViewModel) {
     var showScanner by remember { mutableStateOf(false) }
@@ -113,7 +109,6 @@ fun MainScreen(viewModel: InventoryViewModel) {
         hasCamPermission = granted
     }
 
-    // Okienko po zeskanowaniu kodu aparatem
     if (scannedEan != null) {
         SaveProductDialog(
             initialEan = scannedEan!!,
@@ -125,7 +120,6 @@ fun MainScreen(viewModel: InventoryViewModel) {
         )
     }
 
-    // Okienko dodawania ręcznego
     if (showManualDialog) {
         SaveProductDialog(
             initialEan = "",
@@ -161,7 +155,6 @@ fun MainScreen(viewModel: InventoryViewModel) {
                 TopAppBar(
                     title = { Text("Expo Dywany - Sklep 038") },
                     actions = {
-                        // Przycisk dodawania ręcznego w prawym górnym rogu
                         IconButton(onClick = { showManualDialog = true }) {
                             Icon(Icons.Filled.Edit, contentDescription = "Dodaj ręcznie")
                         }
@@ -219,7 +212,7 @@ fun SaveProductDialog(initialEan: String, onDismiss: () -> Unit, onSave: (String
                     value = eanInput,
                     onValueChange = { eanInput = it },
                     label = { Text("Kod EAN / Indeks") },
-                    enabled = initialEan.isEmpty() // Jeśli kod przeszedł ze skanera, jest zablokowany do edycji, przy ręcznym wpisaniu można go podać
+                    enabled = initialEan.isEmpty()
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
@@ -277,6 +270,7 @@ fun CameraScannerView(onBarcodeScanned: (String) -> Unit, onClose: () -> Unit) {
                     imageAnalysis.setAnalyzer(Executors.newSingleThreadExecutor()) { imageProxy ->
                         val mediaImage = imageProxy.image
                         if (mediaImage != null) {
+                            @Suppress("UnsafeOptInUsageError")
                             val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
                             scanner.process(image)
                                 .addOnSuccessListener { barcodes ->
