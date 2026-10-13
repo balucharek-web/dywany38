@@ -1,0 +1,32 @@
+name: Buduj ExpoDywany APK
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Pobierz kod
+      uses: actions/checkout@v3
+
+    - name: Ustaw Java 17
+      uses: actions/setup-java@v3
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: gradle
+
+    - name: Nadaj uprawnienia do Gradle
+      run: chmod +x gradlew
+
+    - name: Buduj APK
+      run: ./gradlew assembleDebug
+
+    - name: Udostępnij APK
+      uses: actions/upload-artifact@v3
+      with:
+        name: ExpoDywany-038-APK
+        path: app/build/outputs/apk/debug/app-debug.apk
