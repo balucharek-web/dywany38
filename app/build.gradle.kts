@@ -15,9 +15,21 @@ android {
         versionCode = 1
         versionName = "1.0"
     }
+
+    // Wymuszenie Javy 17 dla zgodności z Kotlinem 17
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
     buildFeatures {
         compose = true
     }
+    
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.2"
     }
@@ -35,6 +47,6 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:32.4.0"))
     implementation("com.google.firebase:firebase-firestore-ktx")
     
-    // ML Kit Barcode (do późniejszego użycia w skanerze)
+    // ML Kit Barcode
     implementation("com.google.mlkit:barcode-scanning:17.2.0")
 }
