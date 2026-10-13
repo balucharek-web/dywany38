@@ -12,7 +12,44 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModel
+import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
+// --- 1. MODEL DANYCH ---
+data class Product(
+    val id: String = "",
+    val location: Int = 0,
+    val sub: String = "",
+    val name: String = "Brak produktu",
+    val reference: String = "",
+    val ean: String = "",
+    val updatedAt: Long = 0L
+)
+
+// --- 2. LOGIKA BAZY FIREBASE ---
+class InventoryViewModel : ViewModel() {
+    private val db = FirebaseFirestore.getInstance()
+    private val collectionRef = db.collection("store_038").document("products").collection("items")
+
+    private val _products = MutableStateFlow<List<Product>>(emptyList())
+    val products: StateFlow<List<Product>> = _products
+
+    init {
+        collectionRef.addSnapshotListener { snapshot, error ->
+            if (error != null) return@addSnapshotListener
+            if (snapshot != null) {
+                val updatedList = snapshot.documents.mapNotNull { doc ->
+                    doc.toObject(Product::class.java)?.copy(id = doc.id)
+                }
+                _products.value = updatedList.sortedBy { it.location }
+            }
+        }
+    }
+}
+
+// --- 3. GŁÓWNY EKRAN APLIKACJI ---
 class MainActivity : ComponentActivity() {
     private val viewModel = InventoryViewModel()
 
