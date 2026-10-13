@@ -14,6 +14,7 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
+        multiDexEnabled = true // <--- TO ROZWIĄZUJE BŁĄD DEX
     }
 
     compileOptions {
@@ -51,6 +52,9 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
     
+    // MultiDex
+    implementation("androidx.multidex:multidex:2.0.1")
+
     // Firebase
     implementation(platform("com.google.firebase:firebase-bom:32.4.0"))
     implementation("com.google.firebase:firebase-firestore-ktx")
@@ -58,7 +62,7 @@ dependencies {
     // ML Kit Barcode
     implementation("com.google.mlkit:barcode-scanning:17.2.0")
 
-    // CameraX (Nowe biblioteki do obsługi aparatu)
+    // CameraX
     val cameraxVersion = "1.3.0"
     implementation("androidx.camera:camera-core:$cameraxVersion")
     implementation("androidx.camera:camera-camera2:$cameraxVersion")
