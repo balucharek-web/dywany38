@@ -17,7 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -67,7 +67,7 @@ class InventoryViewModel : ViewModel() {
         }
     }
 
-    fun saveScannedProduct(ean: String, location: Int, sub: String) {
+    fun saveProduct(ean: String, location: Int, sub: String) {
         if (ean.isBlank()) return
         val product = Product(
             id = ean,
@@ -110,12 +110,13 @@ fun MainScreen(viewModel: InventoryViewModel) {
         hasCamPermission = granted
     }
 
+    // Okienko zapisu dla skanera lub dodawania ręcznego
     if (scannedEan != null) {
         SaveProductDialog(
             initialEan = scannedEan!!,
             onDismiss = { scannedEan = null },
             onSave = { ean, loc, sub ->
-                viewModel.saveScannedProduct(ean, loc, sub)
+                viewModel.saveProduct(ean, loc, sub)
                 scannedEan = null
             }
         )
@@ -126,7 +127,7 @@ fun MainScreen(viewModel: InventoryViewModel) {
             initialEan = "",
             onDismiss = { showManualDialog = false },
             onSave = { ean, loc, sub ->
-                viewModel.saveScannedProduct(ean, loc, sub)
+                viewModel.saveProduct(ean, loc, sub)
                 showManualDialog = false
             }
         )
@@ -154,34 +155,33 @@ fun MainScreen(viewModel: InventoryViewModel) {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("Expo Dywany - Sklep 038") },
-                    actions = {
-                        IconButton(onClick = { showManualDialog = true }) {
-                            Icon(Icons.Filled.Edit, contentDescription = "Dodaj ręcznie")
-                        }
-                    }
+                    title = { Text("Expo Dywany - Sklep 038") }
                 )
             },
             floatingActionButton = {
-                FloatingActionButton(onClick = {
-                    if (!hasCamPermission) launcher.launch(Manifest.permission.CAMERA)
-                    showScanner = true
-                }) {
-                    Icon(Icons.Filled.Add, contentDescription = "Skanuj")
+                // Przycisk plusa służący do dodawania nowego produktu
+                FloatingActionButton(onClick = { showManualDialog = true }) {
+                    Icon(Icons.Filled.Add, contentDescription = "Dodaj produkt")
                 }
             }
         ) { padding ->
-            ProductList(viewModel, Modifier.padding(padding))
+            ProductList(
+                viewModel = viewModel,
+                modifier = Modifier.padding(padding),
+                onStartScan = {
+                    if (!hasCamPermission) launcher.launch(Manifest.permission.CAMERA)
+                    showScanner = true
+                }
+            )
         }
     }
 }
 
 @Composable
-fun ProductList(viewModel: InventoryViewModel, modifier: Modifier = Modifier) {
+fun ProductList(viewModel: InventoryViewModel, modifier: Modifier = Modifier, onStartScan: () -> Unit) {
     val products by viewModel.products.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
 
-    // Filtrowanie listy po kodzie EAN, numerze regału lub sublokacji
     val filteredProducts = products.filter {
         it.ean.contains(searchQuery, ignoreCase = true) ||
         it.location.toString().contains(searchQuery) ||
@@ -189,13 +189,18 @@ fun ProductList(viewModel: InventoryViewModel, modifier: Modifier = Modifier) {
     }
 
     Column(modifier = modifier.padding(16.dp)) {
-        // Pasek wyszukiwania
+        // Pasek wyszukiwania z ikoną aparatu umożliwiającą skanowanie bezpośrednio z pola
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Szukaj po EAN lub regale...") },
+            placeholder = { Text("Szukaj EAN / regału...") },
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "Szukaj") },
+            trailingIcon = {
+                IconButton(onClick = onStartScan) {
+                    Icon(Icons.Filled.CameraAlt, contentDescription = "Skanuj kod")
+                }
+            },
             singleLine = true
         )
         
@@ -228,7 +233,7 @@ fun SaveProductDialog(initialEan: String, onDismiss: () -> Unit, onSave: (String
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (initialEan.isEmpty()) "Dodaj dywan ręcznie" else "Zapisz dywan") },
+        title = { Text(if (initialEan.isEmpty()) "Dodaj produkt" else "Zapisz dywan") },
         text = {
             Column {
                 OutlinedTextField(
