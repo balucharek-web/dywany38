@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -178,13 +179,35 @@ fun MainScreen(viewModel: InventoryViewModel) {
 @Composable
 fun ProductList(viewModel: InventoryViewModel, modifier: Modifier = Modifier) {
     val products by viewModel.products.collectAsState()
+    var searchQuery by remember { mutableStateOf("") }
+
+    // Filtrowanie listy po kodzie EAN, numerze regału lub sublokacji
+    val filteredProducts = products.filter {
+        it.ean.contains(searchQuery, ignoreCase = true) ||
+        it.location.toString().contains(searchQuery) ||
+        it.sub.contains(searchQuery, ignoreCase = true)
+    }
 
     Column(modifier = modifier.padding(16.dp)) {
+        // Pasek wyszukiwania
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("Szukaj po EAN lub regale...") },
+            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "Szukaj") },
+            singleLine = true
+        )
+        
+        Spacer(modifier = Modifier.height(16.dp))
+
         if (products.isEmpty()) {
-            Text("Brak produktów lub łączenie z bazą...")
+            Text("Brak produktów w bazie...")
+        } else if (filteredProducts.isEmpty()) {
+            Text("Brak wyników pasujących do wyszukiwania.")
         } else {
             LazyColumn {
-                items(products) { product ->
+                items(filteredProducts) { product ->
                     Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text(text = "Miejsce: ${product.location}${product.sub}", style = MaterialTheme.typography.titleMedium)
