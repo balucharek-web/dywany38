@@ -1,0 +1,11 @@
+package pl.leroymerlin.expodywany038
+
+data class Product(
+    val id: String = "",
+    val location: Int = 0,
+    val sub: String = "",
+    val name: String = "Brak produktu",
+    val reference: String = "",
+    val ean: String = "",
+    val updatedAt: Long = System.currentTimeMillis()
+)
