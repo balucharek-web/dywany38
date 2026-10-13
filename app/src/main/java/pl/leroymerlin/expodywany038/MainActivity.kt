@@ -1,3 +1,4 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, androidx.camera.core.ExperimentalGetImage::class)
 package pl.leroymerlin.expodywany038
 
 import android.Manifest
@@ -8,7 +9,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.OptIn
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -96,7 +96,6 @@ class MainActivity : ComponentActivity() {
 }
 
 // --- 4. INTERFEJS UŻYTKOWNIKA I SKANER ---
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(viewModel: InventoryViewModel) {
     var showScanner by remember { mutableStateOf(false) }
@@ -181,7 +180,6 @@ fun ProductList(viewModel: InventoryViewModel, modifier: Modifier = Modifier) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SaveProductDialog(ean: String, onDismiss: () -> Unit, onSave: (Int, String) -> Unit) {
     var locationInput by remember { mutableStateOf("") }
@@ -218,7 +216,6 @@ fun SaveProductDialog(ean: String, onDismiss: () -> Unit, onSave: (Int, String) 
     )
 }
 
-@OptIn(ExperimentalGetImage::class)
 @Composable
 fun CameraScannerView(onBarcodeScanned: (String) -> Unit, onClose: () -> Unit) {
     val context = LocalContext.current
