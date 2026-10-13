@@ -16,7 +16,6 @@ android {
         versionName = "1.0"
     }
 
-    // Wymuszenie Javy 17 dla zgodności z Kotlinem 17
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -33,6 +32,16 @@ android {
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.2"
     }
+
+    // TO NAPRAWIA BŁĄD PAKOWANIA (packageDebug) BIBLIOTEKI SKANERA
+    packaging {
+        jniLibs {
+            keepDebugSymbols.add("**/*.so")
+        }
+        resources {
+            excludes.add("/META-INF/{AL2.0,LGPL2.1}")
+        }
+    }
 }
 
 dependencies {
@@ -43,10 +52,8 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
     
-    // Firebase
     implementation(platform("com.google.firebase:firebase-bom:32.4.0"))
     implementation("com.google.firebase:firebase-firestore-ktx")
     
-    // ML Kit Barcode
     implementation("com.google.mlkit:barcode-scanning:17.2.0")
 }
