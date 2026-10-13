@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0" />
+<title>Quagga2 + OpenCV.js - Tough EAN scanner</title>
+<style>
+  body{font-family:system-ui,Segoe UI,Roboto,Arial;margin:0;background:#0b1220;color:#e6eef8}
+  #stage{display:flex;gap:12px;padding:12px}
+  video{width:320px;height:240px;background:#000; border-radius:8px}
+  canvas{display:none}
+  #preview{width:320px;height:240px; border-radius:8px; background:#111;}
+  #controls{display:flex;flex-direction:column;gap:8px}
+  button,select{padding:8px;border-radius:8px;border:0;background:#1f6feb;color:white}
+  #log{white-space:pre-wrap;margin-top:8px;max-height:220px;overflow:auto;background:#071023;padding:8px;border-radius:8px}
+  .overlay{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
+</style>
+</head>
+<body>
+<h3 style="margin:12px">Scanner: Quagga2 + OpenCV.js — tuned for narrow / damaged codes</h3>
+<div id="stage">
+  <div style="position:relative">
+    <video id="video" autoplay playsinline></video>
+    <canvas id="canvas" width="1280" height="720" style="display:none"></canvas>
+  </div>
+
+  <div id="controls">
+    <div>
+      <button id="btnStart">Start</button>
+      <button id="btnStop">Stop</button>
+      <button id="btnTorch">Torch On/Off</button>
+    </div>
+
+    <label>Scan sensitivity:
+      <select id="sensitivity">
+        <option value="low">Low (fast)</option>
+        <option value="medium" selected>Medium</option>
+        <option value="high">High (slower, more attempts)</option>
+      </select>
+    </label>
+
+    <div id="log">log...</div>
+  </div>
+</div>
+
+<!-- CDN: Quagga2 and OpenCV.js -->
+<script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js"></script>
+<script async src="https://docs.opencv.org/master/opencv.js" type="text/javascript"></script>
+
+<script>
+/* ====== Ustawienia ====== */
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const logEl = document.getElementById('log');
+let stream = null;
+let track = null;
+let torchOn = false;
+let scanning = false;
+let lastResults = []; // voting
+
+// Parametry (możesz zmieniać)
+const FRAME_INTERVAL = { low: 150, medium: 250, high: 400 }; // ms between heavy scans
+const VOTE_WINDOW = 5; // ile ostatnich wyników liczyć
+const ATTEMPTS_PER_FRAME = { low:1, medium:2, high:3 };
+
+/* ====== Narzędzia logowania ====== */
+function log(...args){
+  const t = new Date().toISOString().slice(11,23);
+  logEl.textContent = t + '  ' + args.map(a => (typeof a === 'object'? JSON.stringify(a): a)).join(' ') + '\n' + logEl.textContent;
+}
+
+/* ====== Start kamery ====== */
+async function startCamera(){
+  if (stream) return;
+  const constraints = {
+    audio: false,
+    video: {
+      facingMode: 'environment',
+      width: { ideal: 1920 },
+      height: { ideal: 1080 }
+    }
+  };
+  try {
+    stream = await navigator.mediaDevices.getUserMedia(constraints);
+    video.srcObject = stream;
+    track = stream.getVideoTracks()[0];
+    await video.play();
+    log('Camera started', video.videoWidth + 'x' + video.videoHeight);
+  } catch (e) {
+    log('Camera error: ' + e);
+    throw e;
+  }
+}
+
+/* ====== Torch control ====== */
+async function toggleTorch(){
+  if (!track) { log('Brak track'); return; }
+  const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+  if (!capabilities.torch) { log('Torch not supported'); return; }
+  try {
+    torchOn = !torchOn;
+    await track.applyConstraints({ advanced: [{ torch: torchOn }] });
+    log('Torch', torchOn);
+  } catch (e) { log('Torch err', e); }
+}
+
+/* ====== Preprocessing OpenCV (synchronous-ish) ======
+   - scale up (improve effective DPI)
+   - grayscale
+   - bilateral filter (denoise while preserving edges)
+   - CLAHE (contrast)
+   - adaptiveThreshold
+   - morphology closing
+   - deskew (minAreaRect on largest contour)
+   Returns a canvas (processed) as dataURL for Quagga.
+*/
+function preprocessFrameRaw(cv, srcCanvas){
+  try {
+    const src = cv.imread(srcCanvas);
+    // scale up
+    let scale = 1.6;
+    let dsize = new cv.Size(Math.round(src.cols*scale), Math.round(src.rows*scale));
+    let big = new cv.Mat();
+    cv.resize(src, big, dsize, 0, 0, cv.INTER_CUBIC);
+
+    // grayscale
+    let gray = new cv.Mat();
+    cv.cvtColor(big, gray, cv.COLOR_RGBA2GRAY, 0);
+
+    // denoise
+    let den = new cv.Mat();
+    cv.bilateralFilter(gray, den, 9, 75, 75, cv.BORDER_DEFAULT);
+
+    // CLAHE
+    let clahe = new cv.Mat();
+    try {
+      let claheObj = new cv.CLAHE(2.0, new cv.Size(8,8));
+      claheObj.apply(den, clahe);
+      claheObj.delete();
+    } catch(e) {
+      // fallback to histogram equalize
+      cv.equalizeHist(den, clahe);
+    }
+
+    // adaptive threshold (works even with gradient light)
+    let thresh = new cv.Mat();
+    cv.adaptiveThreshold(clahe, thresh, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 31, 10);
+
+    // morphology closing to fill small gaps in bars
+    let kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3,3));
+    let closed = new cv.Mat();
+    cv.morphologyEx(thresh, closed, cv.MORPH_CLOSE, kernel);
+
+    // deskew: find largest contour, rotate
+    let contours = new cv.MatVector();
+    let hierarchy = new cv.Mat();
+    cv.findContours(closed, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+    let maxArea = 0;
+    let maxCnt = null;
+    for (let i=0;i<contours.size();i++){
+      const cnt = contours.get(i);
+      const area = cv.contourArea(cnt);
+      if (area > maxArea) { maxArea = area; maxCnt = cnt; }
+    }
+
+    let rotated = new cv.Mat();
+    if (maxCnt && maxArea > 5000){
+      let rotatedRect = cv.minAreaRect(maxCnt);
+      let angle = rotatedRect.angle;
+      // minAreaRect angle conventions: adjust
+      if (angle < -45) angle += 90;
+      // rotate big by -angle
+      let center = new cv.Point(big.cols/2, big.rows/2);
+      let M = cv.getRotationMatrix2D(center, -angle, 1);
+      let sz = new cv.Size(big.cols, big.rows);
+      cv.warpAffine(big, rotated, M, sz, cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar(255,255,255,255));
+      M.delete();
+    } else {
+      rotated = big.clone();
+    }
+
+    // Final convert to RGBA canvas so Quagga can use it
+    let out = new cv.Mat();
+    cv.cvtColor(rotated, out, cv.COLOR_BGR2RGBA);
+
+    // write to temporary canvas
+    const tmpCanvas = document.createElement('canvas');
+    tmpCanvas.width = out.cols;
+    tmpCanvas.height = out.rows;
+    cv.imshow(tmpCanvas, out);
+
+    // cleanup
+    src.delete(); big.delete(); gray.delete(); den.delete(); clahe.delete();
+    thresh.delete(); closed.delete(); kernel.delete(); contours.delete(); hierarchy.delete();
+    if (maxCnt) maxCnt.delete();
+    rotated.delete(); out.delete();
+
+    return tmpCanvas;
+  } catch (err) {
+    console.error('preprocess error', err);
+    return srcCanvas; // fallback
+  }
+}
+
+/* ====== Scan flow: grab canvas, run preprocessing, then call Quagga.decodeSingle multiple scales ====== */
+async function scanLoop(){
+  if (!scanning) return;
+  const sensitivity = document.getElementById('sensitivity').value;
+  const interval = FRAME_INTERVAL[sensitivity];
+  const attempts = ATTEMPTS_PER_FRAME[sensitivity];
+
+  // draw video into canvas
+  canvas.width = video.videoWidth || 1280;
+  canvas.height = video.videoHeight || 720;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  // Wait for OpenCV loaded
+  if (typeof cv === 'undefined' || !cv || !cv.imread) {
+    log('OpenCV not ready yet — using raw frame');
+    // fallback: try BarcodeDetector native or Quagga on raw
+    await tryDecodeFromCanvas(canvas, attempts);
+    setTimeout(scanLoop, interval);
+    return;
+  }
+
+  // Preprocess
+  const procCanvas = preprocessFrameRaw(cv, canvas);
+
+  // Try decode multiple times with different scalings / crops
+  let success = false;
+  for (let scaleAttempt=0; scaleAttempt<attempts; scaleAttempt++){
+    // optionally crop center strip where barcode is likely (help for narrow)
+    // create a small crop around center band to emphasize narrow bars
+    const w = procCanvas.width;
+    const h = procCanvas.height;
+    const cropH = Math.round(h * (0.25 + 0.1*scaleAttempt)); // vary height
+    const cropY = Math.round((h - cropH)/2);
+    const cropCanvas = document.createElement('canvas');
+    cropCanvas.width = w;
+    cropCanvas.height = cropH;
+    cropCanvas.getContext('2d').drawImage(procCanvas, 0, cropY, w, cropH, 0, 0, w, cropH);
+
+    // call decoder
+    const r = await tryDecodeFromCanvas(cropCanvas, 1);
+    if (r) { success = true; break; }
+  }
+
+  // Trim lastResults to voting window and try to decide final code
+  if (lastResults.length > VOTE_WINDOW) lastResults = lastResults.slice(0, VOTE_WINDOW);
+  const counts = {};
+  for (const v of lastResults) counts[v] = (counts[v]||0) + 1;
+  let best = null, bestCount = 0;
+  for (const k of Object.keys(counts)){ if (counts[k] > bestCount) { best = k; bestCount = counts[k]; } }
+  if (best && bestCount >= Math.ceil(VOTE_WINDOW/2)) {
+    log('Final (voted):', best);
+    // możesz tu wysłać wynik do serwera
+  }
+
+  setTimeout(scanLoop, interval);
+}
+
+/* ====== Try decode: prefer native BarcodeDetector, else Quagga.decodeSingle ====== */
+async function tryDecodeFromCanvas(aCanvas, maxAttempts=1){
+  // First try BarcodeDetector (native) if present
+  if ('BarcodeDetector' in window){
+    try {
+      const detector = new BarcodeDetector({formats: ['ean_13','ean_8','code_128','upc_a','code_39']});
+      const barcodes = await detector.detect(aCanvas);
+      if (barcodes && barcodes.length){
+        const txt = barcodes[0].rawValue || barcodes[0].rawData || JSON.stringify(barcodes[0]);
+        log('Native detected:', txt);
+        lastResults.unshift(txt);
+        return txt;
+      }
+    } catch(e){ /* ignore */ }
+  }
+
+  // Fallback: Quagga2 decodeSingle (synchronous-ish)
+  return new Promise((resolve) => {
+    try {
+      const src = aCanvas.toDataURL(); // base64 image
+      Quagga.decodeSingle({
+        src,
+        numOfWorkers: 0,
+        locate: true,
+        inputStream: { size: 800 },
+        decoder: {
+          readers: ["ean_reader", "ean_8_reader", "code_128_reader", "upc_reader", "code_39_reader"]
+        },
+        locate: true
+      }, function(result){
+        if (result && result.codeResult && result.codeResult.code){
+          const code = result.codeResult.code;
+          log('Quagga result:', code, 'meta:', result.codeResult);
+          lastResults.unshift(code);
+          resolve(code);
+        } else {
+          resolve(null);
+        }
+      });
+    } catch (err){
+      console.error(err);
+      resolve(null);
+    }
+  });
+}
+
+/* ====== Buttons ====== */
+document.getElementById('btnStart').addEventListener('click', async () => {
+  try {
+    await startCamera();
+    scanning = true;
+    scanLoop();
+  } catch (e) { log('Start failed'); }
+});
+
+document.getElementById('btnStop').addEventListener('click', () => {
+  scanning = false;
+  if (stream) {
+    stream.getTracks().forEach(t => t.stop());
+    stream = null; track = null;
+    log('Camera stopped');
+  }
+});
+
+document.getElementById('btnTorch').addEventListener('click', toggleTorch);
+
+/* ====== Cleanup on unload ====== */
+window.addEventListener('beforeunload', () => {
+  if (stream) stream.getTracks().forEach(t => t.stop());
+});
+</script>
+</body>
+</html>

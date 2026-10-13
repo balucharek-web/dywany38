@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Loader — PWA</title>
+<script>
+// Sprawdzamy, czy aplikacja została zainstalowana jako PWA
+if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) {
+    // Jeśli użytkownik ma zainstalowaną PWA na index.html
+    // od razu przekierowujemy na index_public.html
+    window.location.replace('index_public.html');
+} else {
+    // Jeśli otwiera w przeglądarce normalnie, możesz też przekierować lub wczytać loader
+    window.location.replace('index_public.html');
+}
+</script>
+</head>
+<body>
+<p>Przekierowujemy...</p>
+</body>
+</html>
