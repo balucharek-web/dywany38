@@ -96,6 +96,7 @@ class MainActivity : ComponentActivity() {
 }
 
 // --- 4. INTERFEJS UŻYTKOWNIKA I SKANER ---
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(viewModel: InventoryViewModel) {
     var showScanner by remember { mutableStateOf(false) }
@@ -111,7 +112,6 @@ fun MainScreen(viewModel: InventoryViewModel) {
     }
 
     if (scannedEan != null) {
-        // Okienko zapisu po zeskanowaniu
         SaveProductDialog(
             ean = scannedEan!!,
             onDismiss = { scannedEan = null },
@@ -181,6 +181,7 @@ fun ProductList(viewModel: InventoryViewModel, modifier: Modifier = Modifier) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SaveProductDialog(ean: String, onDismiss: () -> Unit, onSave: (Int, String) -> Unit) {
     var locationInput by remember { mutableStateOf("") }
