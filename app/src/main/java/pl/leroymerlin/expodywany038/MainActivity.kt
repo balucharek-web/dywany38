@@ -17,7 +17,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
@@ -185,7 +184,7 @@ fun MainScreen(viewModel: InventoryViewModel) {
                     onError = { err -> Log.e("Login", "Błąd logowania", err) }
                 )
             } catch (e: androidx.credentials.exceptions.GetCredentialCancellationException) {
-                // Użytkownik anulował okno logowania
+                // Użytkownik anulował okno
             } catch (e: Exception) {
                 Log.e("Login", "Błąd menedżera poświadczeń", e)
             }
@@ -318,19 +317,20 @@ fun ProductList(viewModel: InventoryViewModel, modifier: Modifier = Modifier, on
     }
 
     Column(modifier = modifier.padding(16.dp)) {
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { searchQuery = it },
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Szukaj EAN / regału (dostępne bez logowania)...") },
-            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "Szukaj") },
-            trailingIcon = {
-                IconButton(onClick = onStartScan) {
-                    Icon(Icons.Filled.CameraAlt, contentDescription = "Skanuj kod")
-                }
-            },
-            singleLine = true
-        )
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier.weight(1f),
+                placeholder = { Text("Szukaj EAN / regału...") },
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "Szukaj") },
+                singleLine = true
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Button(onClick = onStartScan) {
+                Text("Skanuj")
+            }
+        }
         
         Spacer(modifier = Modifier.height(16.dp))
 
