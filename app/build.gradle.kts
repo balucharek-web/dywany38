@@ -1,3 +1,4 @@
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -56,16 +57,18 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
     
-    // DODANO: Rozszerzone ikony (naprawia błąd z CameraAlt)
-    implementation("androidx.compose.material:material-icons-extended")
-    
     implementation("androidx.multidex:multidex:2.0.1")
 
-    // Firebase
+    // Firebase (BOM, Firestore oraz Auth do logowania)
     implementation(platform("com.google.firebase:firebase-bom:32.4.0"))
     implementation("com.google.firebase:firebase-firestore-ktx")
-    // DODANO: Obsługa logowania Firebase (naprawia błędy z FirebaseAuth i currentUser)
     implementation("com.google.firebase:firebase-auth-ktx")
+
+    // Nowoczesne logowanie Google (Credential Manager)
+    implementation("androidx.credentials:credentials:1.3.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
+    implementation("com.google.android.gms:play-services-auth:20.7.0")
     
     // ML Kit Barcode
     implementation("com.google.mlkit:barcode-scanning:17.2.0")
