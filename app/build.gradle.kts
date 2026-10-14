@@ -56,11 +56,16 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
     
+    // DODANO: Rozszerzone ikony (naprawia błąd z CameraAlt)
+    implementation("androidx.compose.material:material-icons-extended")
+    
     implementation("androidx.multidex:multidex:2.0.1")
 
     // Firebase
     implementation(platform("com.google.firebase:firebase-bom:32.4.0"))
     implementation("com.google.firebase:firebase-firestore-ktx")
+    // DODANO: Obsługa logowania Firebase (naprawia błędy z FirebaseAuth i currentUser)
+    implementation("com.google.firebase:firebase-auth-ktx")
     
     // ML Kit Barcode
     implementation("com.google.mlkit:barcode-scanning:17.2.0")
