@@ -33,8 +33,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import androidx.credentials.CredentialManager
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.GetCredentialResponse
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
+import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
@@ -42,6 +49,7 @@ import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import java.util.concurrent.Executors
 
 data class Product(
@@ -90,6 +98,32 @@ class InventoryViewModel : ViewModel() {
         collectionRef.document(ean).set(product)
     }
 
+    fun signInWithGoogleCredential(response: GetCredentialResponse, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val credential = response.credential
+                if (credential is androidx.credentials.CustomCredential &&
+                    credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+                ) {
+                    val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
+                    val googleToken = googleIdTokenCredential.idToken
+                    val firebaseCred = GoogleAuthProvider.getCredential(googleToken, null)
+                    
+                    auth.signInWithCredential(firebaseCred)
+                        .addOnSuccessListener { authResult ->
+                            _currentUser.value = authResult.user
+                            onSuccess()
+                        }
+                        .addOnFailureListener { e -> onError(e) }
+                } else {
+                    onError(Exception("Nieznany typ poświadczenia"))
+                }
+            } catch (e: Exception) {
+                onError(e)
+            }
+        }
+    }
+
     fun logout() {
         auth.signOut()
         _currentUser.value = null
@@ -120,12 +154,42 @@ fun MainScreen(viewModel: InventoryViewModel) {
     
     val currentUser by viewModel.currentUser.collectAsState()
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    
     var hasCamPermission by remember {
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
     }
     
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         hasCamPermission = granted
+    }
+
+    fun launchGoogleLogin() {
+        coroutineScope.launch {
+            try {
+                val googleIdOption = GetGoogleIdOption.Builder()
+                    .setFilterByAuthorizedAccounts(false)
+                    .setAutoSelectEnabled(false)
+                    .build()
+
+                val request = GetCredentialRequest.Builder()
+                    .addCredentialOption(googleIdOption)
+                    .build()
+
+                val credentialManager = CredentialManager.create(context)
+                val result = credentialManager.getCredential(context, request)
+                
+                viewModel.signInWithGoogleCredential(
+                    response = result,
+                    onSuccess = { showLoginDialog = false },
+                    onError = { err -> Log.e("Login", "Błąd logowania", err) }
+                )
+            } catch (e: androidx.credentials.exceptions.GetCredentialCancellationException) {
+                // Użytkownik anulował okno logowania
+            } catch (e: Exception) {
+                Log.e("Login", "Błąd menedżera poświadczeń", e)
+            }
+        }
     }
 
     if (scannedEan != null) {
@@ -163,10 +227,10 @@ fun MainScreen(viewModel: InventoryViewModel) {
         AlertDialog(
             onDismissRequest = { showLoginDialog = false; scannedEan = null },
             title = { Text("Wymagane logowanie służbowe") },
-            text = { Text("Aby dodawać lub edytować dywany, musisz zalogować się kontem Google powiązanym z profilem firmowym Leroy Merlin.") },
+            text = { Text("Aby dodawać lub edytować dywany, wybierz swoje konto Google (w tym profil służbowy Leroy Merlin).") },
             confirmButton = {
                 Button(onClick = {
-                    showLoginDialog = false
+                    launchGoogleLogin()
                 }) {
                     Text("Zaloguj kontem Google")
                 }
